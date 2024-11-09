@@ -1,10 +1,13 @@
 require("dotenv").config;
 const { userModel } = require("../models/user");
 const asyncHandler = require("../utils/asyncHandler");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
 class userController {
   constructor() {
     this.register = asyncHandler(this.register.bind(this));
+    this.login = asyncHandler(this.login.bind(this));
   }
 
   async register(req, res, next) {
@@ -15,55 +18,46 @@ class userController {
         .status(400)
         .json({ message: "Email and password are required" });
     }
-    const existingUser = await userModel.findOne({ email })
-    console.log('existingxdxdUser', existingUser)
-    if (existingUser ) {
-      return res.status(400).json({ message: 'User  already exists' });
+    const existingUser = await userModel.findOne({ email });
+    console.log("existingxdxdUser", existingUser);
+    if (existingUser) {
+      return res.status(400).json({ message: "User  already exists" });
     }
-    const newUser  = new userModel({
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new userModel({
       email,
-      password,
+      password: hashedPassword,
     });
     await newUser.save();
-    
-    res.status(201).json({ message: 'User  registered successfully' });
+
+    res.status(201).json({ message: "User  registered successfully" });
   }
 
+  async login(req, res, next) {
+    const { email, password } = req.body;
+    const user = await userModel.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+    const authtoken = jwt.sign(
+      {
+        id: user._id,
+        email: user.email,
+      },
+      process.env.SECRET_KEY,
+      { expiresIn: "1h" }
+    );
+    res.json({
+      message: "User  logged in successfully", 
+      authtoken
+  });
+    
+  }
 }
 
 module.exports = new userController();
-
-// try {
-//   const { email, password } = req.body;
-
-//   let schema;
-
-//   const isValid = await schema.validate(req.body);
-//   if (!isValid) {
-//     const errors = schema.validateSync(req.body, { abortEarly: false })
-//       .error.details;
-//     const errorMessages = errors.map((error) => error.message);
-//     return sendErrorResponse({
-//       status: 400,
-//       res,
-//       message: errorMessages.join(", "),
-//     });
-//   }
-//   const existingUserByEmail = await userModel.findOne({ email: email });
-
-//   if(existingUserByEmail){
-//     sendErrorResponse({
-//       status: 403,
-//       res,
-//       message: "email is already exist.",
-//     });
-//   }
-// } catch (error) {
-//   console.error(error);
-//   sendErrorResponse({
-//     status: 500,
-//     res,
-//     error: error.message,
-//     message: "Internal Server Error",
-//   });
-// }
